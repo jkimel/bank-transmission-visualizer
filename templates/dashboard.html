@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Transmisiones Bancarias{% endblock %}
+
+{% block content %}
+<div class="main-container">
+    <div class="row">
+        <div class="col-12">
+            <div class="welcome-card card border-0 shadow-sm">
+                <div class="card-body text-center py-5">
+                    <h1 class="h2 mb-3">Visualizador de Transmisiones Bancarias</h1>
+                    <p class="lead text-muted mb-4">
+                        Sistema para el análisis y visualización del recorrido de transmisiones financieras
+                    </p>
+                    
+                    {% if current_data is none %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Para comenzar, sube un archivo CSV con los datos de transmisiones
+                    </div>
+                    {% else %}
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle me-2"></i>
+                        Archivo cargado: <strong>{{ current_filename }}</strong> con {{ current_data|length }} registros
+                    </div>
+                    {% endif %}
+                    
+                    <div class="row mt-4">
+                        <div class="col-md-4 mb-3">
+                            <div class="card dashboard-card h-100">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Subir Datos</h5>
+                                    <p class="card-text">Carga tu archivo CSV con los datos de transmisiones</p>
+                                    <a href="{{ url_for('upload_page') }}" class="btn btn-primary">Ir a Subir CSV</a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <div class="card dashboard-card h-100">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Explorar Datos</h5>
+                                    <p class="card-text">Navega y filtra los datos en formato tabla</p>
+                                    <a href="{{ url_for('table_page') }}" class="btn btn-success">Ver Tabla</a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <div class="card dashboard-card h-100">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Visualización</h5>
+                                    <p class="card-text">Analiza las transmisiones mediante grafos interactivos</p>
+                                    <a href="{{ url_for('table_page') }}" class="btn btn-warning">Explorar Grafos</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-5">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="fas fa-info-circle me-2"></i>Instrucciones</h5>
+            </div>
+            <div class="card-body">
+                <ol class="list-group list-group-numbered">
+                    <li class="list-group-item border-0">Sube un archivo CSV con el formato requerido</li>
+                    <li class="list-group-item border-0">Navega por los datos en la vista de tabla</li>
+                    <li class="list-group-item border-0">Selecciona una fila para visualizar el grafo</li>
+                    <li class="list-group-item border-0">Analiza las conexiones y riesgos</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+    
+{% endblock %}

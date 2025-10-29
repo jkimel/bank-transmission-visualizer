@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Tabla de Datos - Transmisiones Bancarias{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h4 class="card-title mb-0">
+                    <i class="fas fa-table me-2"></i>Tabla de Transmisiones
+                </h4>
+                <div>
+                    <button id="downloadBtn" class="btn btn-light btn-sm me-2">
+                        <i class="fas fa-download me-1"></i>Descargar CSV
+                    </button>
+                    <a href="{{ url_for('upload_page') }}" class="btn btn-warning btn-sm">
+                        <i class="fas fa-upload me-1"></i>Subir Nuevo CSV
+                    </a>
+                </div>
+            </div>
+            <!-- Panel de Información de Datos -->
+            <div id="dataInfoPanel" class="data-info-panel alert alert-info d-none">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Información de datos cargados</strong>
+                    </div>
+                    <small class="text-muted">Los valores vacíos se muestran en <em class="text-muted">cursiva</em></small>
+                </div>
+                <!-- La información se cargará dinámicamente aquí -->
+            </div>
+            <div class="card-body">
+                <!-- Filtros y Búsqueda -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">Búsqueda General</label>
+                        <input type="text" id="searchInput" class="form-control form-control-sm" placeholder="Buscar en todos los campos...">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold">Entidad</label>
+                        <select id="entityFilter" class="form-select form-select-sm">
+                            <option value="">Todas</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold">Sistema</label>
+                        <select id="systemFilter" class="form-select form-select-sm">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold">Tipo</label>
+                        <select id="typeFilter" class="form-select form-select-sm">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold">Riesgo</label>
+                        <select id="riskFilter" class="form-select form-select-sm">
+                            <option value="">Todos</option>
+                            <option value="Bajo">Bajo</option>
+                            <option value="Medio">Medio</option>
+                            <option value="Alto">Alto</option>
+                        </select>
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button id="applyFilters" class="btn btn-primary btn-sm w-100 me-1">
+                            <i class="fas fa-filter"></i>
+                        </button>
+                        <button id="resetFilters" class="btn btn-secondary btn-sm w-100">
+                            <i class="fas fa-redo"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tabla -->
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th data-sort="id" style="width: 80px; cursor: pointer;">
+                                    ID <i class="fas fa-sort ms-1"></i>
+                                </th>
+                                <th data-sort="Entidad" style="cursor: pointer;">
+                                    Entidad <i class="fas fa-sort ms-1"></i>
+                                </th>
+                                <th data-sort="Sistema de origen" style="cursor: pointer;">
+                                    Sistema Origen <i class="fas fa-sort ms-1"></i>
+                                </th>
+                                <th data-sort="Sistema de Destino" style="cursor: pointer;">
+                                    Sistema Destino <i class="fas fa-sort ms-1"></i>
+                                </th>
+                                <th data-sort="Tipo de Transmisión" style="cursor: pointer;">
+                                    Tipo <i class="fas fa-sort ms-1"></i>
+                                </th>
+                                <th data-sort="Propietario Datos de Destino" style="cursor: pointer;">
+                                    Propietario <i class="fas fa-sort ms-1"></i>
+                                </th>
+                                <th data-sort="Riesgo de falla" style="cursor: pointer;">
+                                    Riesgo <i class="fas fa-sort ms-1"></i>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <!-- Datos cargados dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Paginación e Info -->
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div class="d-flex align-items-center">
+                        <span class="text-muted small me-3">Mostrar:</span>
+                        <select id="pageSize" class="form-select form-select-sm w-auto">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                        <span class="text-muted small ms-3">
+                            Mostrando <span id="showingFrom">0</span>-<span id="showingTo">0</span> de 
+                            <span id="totalRows">0</span> registros
+                        </span>
+                    </div>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0" id="pagination">
+                            <!-- Paginación generada dinámicamente -->
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instrucciones -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h6 class="card-title"><i class="fas fa-mouse-pointer me-2"></i>Instrucciones</h6>
+                <p class="card-text small mb-2">
+                    • Haz clic en cualquier fila para visualizar el grafo de esa transmisión
+                </p>
+                <p class="card-text small mb-2">
+                    • Usa los filtros y búsqueda para encontrar transmisiones específicas
+                </p>
+                <p class="card-text small">
+                    • Ordena haciendo clic en los encabezados de columna
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/table.js') }}"></script>
+<script>
+// Inicializar la tabla cuando la página cargue
+document.addEventListener('DOMContentLoaded', function() {
+    window.tableManager = new DataTableManager();
+    
+    // Descargar CSV
+    document.getElementById('downloadBtn').addEventListener('click', function() {
+        window.location.href = '/api/download';
+    });
+});
+</script>
+{% endblock %}

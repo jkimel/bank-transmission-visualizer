@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Subir CSV - Transmisiones Bancarias{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h4 class="card-title mb-0">
+                    <i class="fas fa-upload me-2"></i>Subir Archivo CSV
+                </h4>
+            </div>
+            <div class="card-body p-4">
+                <div class="upload-area border-dashed p-5 text-center rounded mb-4">
+                    <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                    <h5>Arrastra y suelta tu archivo CSV aquí</h5>
+                    <p class="text-muted mb-3">o</p>
+                    
+                    <form id="uploadForm" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <input type="file" class="form-control" id="csvFile" accept=".csv" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-lg" id="uploadBtn">
+                            <i class="fas fa-upload me-2"></i>Subir Archivo
+                        </button>
+                    </form>
+                </div>
+                
+                <div id="uploadStatus" class="alert d-none"></div>
+                
+                <div class="mt-4">
+                    <h6 class="text-muted mb-3">Requisitos del archivo:</h6>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Formato CSV
+                            <i class="fas fa-check text-success"></i>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Columnas requeridas
+                            <i class="fas fa-check text-success"></i>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Máximo 10MB
+                            <i class="fas fa-check text-success"></i>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const fileInput = document.getElementById('csvFile');
+    const file = fileInput.files[0];
+    const statusDiv = document.getElementById('uploadStatus');
+    const uploadBtn = document.getElementById('uploadBtn');
+    
+    if (!file) {
+        showStatus('Por favor seleccione un archivo CSV', 'error');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Mostrar estado de carga
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Subiendo...';
+    
+    fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.redirect) {
+            window.location.href = data.redirect;
+        } else {
+            showStatus(data.error || 'Error desconocido', 'error');
+        }
+    })
+    .catch(error => {
+        showStatus('Error al subir archivo: ' + error.message, 'error');
+    })
+    .finally(() => {
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = '<i class="fas fa-upload me-2"></i>Subir Archivo';
+    });
+});
+
+function showStatus(message, type) {
+    const statusDiv = document.getElementById('uploadStatus');
+    statusDiv.className = `alert alert-${type === 'error' ? 'danger' : 'success'} d-block`;
+    statusDiv.innerHTML = `
+        <i class="fas fa-${type === 'error' ? 'exclamation-triangle' : 'check-circle'} me-2"></i>
+        ${message}
+    `;
+    
+    // Auto-ocultar después de 5 segundos si es éxito
+    if (type !== 'error') {
+        setTimeout(() => {
+            statusDiv.classList.add('d-none');
+        }, 5000);
+    }
+}
+</script>
+{% endblock %}
