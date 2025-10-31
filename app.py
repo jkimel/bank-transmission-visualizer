@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, flash
+from flask_cors import CORS
 import pandas as pd
 import networkx as nx
 import os
@@ -8,6 +9,7 @@ from werkzeug.utils import secure_filename
 import numpy as np
 
 app = Flask(__name__)
+CORS(app)
 app.secret_key = 'your-secret-key-here'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB

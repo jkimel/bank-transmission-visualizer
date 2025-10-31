@@ -67,7 +67,7 @@ class DataTableManager {
 
         try {
             console.log('Cargando datos de la tabla...');
-            const response = await fetch(`/api/table?${params}`);
+            const response = await fetch(`https://bank-transmission-visualizer.onrender.com/api/table?${params}`);
             const result = await response.json();
 
             if (response.ok) {
@@ -219,7 +219,7 @@ class DataTableManager {
 
     async loadFilterOptions() {
         try {
-            const response = await fetch('/api/filter-options');
+            const response = await fetch('https://bank-transmission-visualizer.onrender.com/api/filter-options');
             const options = await response.json();
             
             // Llenar dropdowns de filtros
@@ -360,7 +360,7 @@ class DataTableManager {
 
     async loadDataInfo() {
         try {
-            const response = await fetch('/api/data-info');
+            const response = await fetch('https://bank-transmission-visualizer.onrender.com/api/data-info');
             const text = await response.text();
             const info = JSON.parse(text);
 

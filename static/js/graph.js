@@ -32,7 +32,7 @@ class GraphManager {
 
     async loadGraphData() {
         try {
-            const response = await fetch(`/api/graph?row_id=${this.currentRowId}`);
+            const response = await fetch(`https://bank-transmission-visualizer.onrender.com/api/graph?row_id=${this.currentRowId}`);
             const data = await response.json();
 
             if (response.ok) {
