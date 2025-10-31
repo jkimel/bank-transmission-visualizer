@@ -6,6 +6,7 @@ class DataTableManager {
         this.currentSortDir = 'asc';
         this.currentFilters = {};
         this.currentSearch = '';
+        this.currentColumnOrder = [];
         
         this.initializeEventListeners();
         this.loadTableData();
@@ -13,177 +14,7 @@ class DataTableManager {
         this.loadDataInfo();
     }
 
-    // Añadir estos métodos a la clase DataTableManager
-
-async loadFilterOptions() {
-    try {
-        const response = await fetch('/api/filter-options');
-        const options = await response.json();
-        
-        // Llenar dropdowns de filtros
-        this.populateFilter('entityFilter', options.entities || []);
-        this.populateFilter('systemFilter', options.systems || []);
-        this.populateFilter('typeFilter', options.types || []);
-    } catch (error) {
-        console.error('Error loading filter options:', error);
-    }
-}
-
-populateFilter(selectId, options) {
-    const select = document.getElementById(selectId);
-    if (!select) return;
-    
-    // Mantener la opción "Todos"
-    const currentValue = select.value;
-    select.innerHTML = '<option value="">Todos</option>';
-    
-    options.forEach(option => {
-        const optionElement = document.createElement('option');
-        optionElement.value = option;
-        optionElement.textContent = option;
-        select.appendChild(optionElement);
-    });
-    
-    // Restaurar selección si existe
-    if (options.includes(currentValue)) {
-        select.value = currentValue;
-    }
-}
-
-applyFilters() {
-    this.currentFilters = {
-        entity: document.getElementById('entityFilter').value,
-        system: document.getElementById('systemFilter').value,
-        type: document.getElementById('typeFilter').value,
-        risk: document.getElementById('riskFilter').value
-    };
-    this.currentPage = 1;
-    this.loadTableData();
-}
-
-resetFilters() {
-    document.getElementById('entityFilter').value = '';
-    document.getElementById('systemFilter').value = '';
-    document.getElementById('typeFilter').value = '';
-    document.getElementById('riskFilter').value = '';
-    this.currentSearch = '';
-    document.getElementById('searchInput').value = '';
-    this.currentFilters = {};
-    this.currentPage = 1;
-    this.loadTableData();
-}
-
-handleSort(column) {
-    if (this.currentSort === column) {
-        this.currentSortDir = this.currentSortDir === 'asc' ? 'desc' : 'asc';
-    } else {
-        this.currentSort = column;
-        this.currentSortDir = 'asc';
-    }
-    this.currentPage = 1;
-    this.loadTableData();
-    this.updateSortIcons();
-}
-
-updateSortIcons() {
-    document.querySelectorAll('th[data-sort] i').forEach(icon => {
-        icon.className = 'fas fa-sort ms-1';
-    });
-    
-    const currentTh = document.querySelector(`th[data-sort="${this.currentSort}"]`);
-    if (currentTh) {
-        const icon = currentTh.querySelector('i');
-        if (icon) {
-            icon.className = this.currentSortDir === 'asc' 
-                ? 'fas fa-sort-up ms-1' 
-                : 'fas fa-sort-down ms-1';
-        }
-    }
-}
-
-renderPagination(result) {
-    const pagination = document.getElementById('pagination');
-    if (!pagination) return;
-    
-    const totalPages = Math.ceil(result.total / this.pageSize);
-    
-    let html = '';
-    
-    // Botón anterior
-    html += `<li class="page-item ${this.currentPage === 1 ? 'disabled' : ''}">
-        <a class="page-link" href="#" data-page="${this.currentPage - 1}">Anterior</a>
-    </li>`;
-    
-    // Páginas
-    for (let i = 1; i <= totalPages; i++) {
-        html += `<li class="page-item ${i === this.currentPage ? 'active' : ''}">
-            <a class="page-link" href="#" data-page="${i}">${i}</a>
-        </li>`;
-    }
-    
-    // Botón siguiente
-    html += `<li class="page-item ${this.currentPage === totalPages ? 'disabled' : ''}">
-        <a class="page-link" href="#" data-page="${this.currentPage + 1}">Siguiente</a>
-    </li>`;
-    
-    pagination.innerHTML = html;
-    
-    // Event listeners para paginación
-    pagination.querySelectorAll('.page-link').forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const page = parseInt(link.dataset.page);
-            if (page >= 1 && page <= totalPages && page !== this.currentPage) {
-                this.currentPage = page;
-                this.loadTableData();
-            }
-        });
-    });
-}
-
-updateTableInfo(result) {
-    const showingFrom = document.getElementById('showingFrom');
-    const showingTo = document.getElementById('showingTo');
-    const totalRows = document.getElementById('totalRows');
-    
-    if (showingFrom && showingTo && totalRows) {
-        const from = (this.currentPage - 1) * this.pageSize + 1;
-        const to = Math.min(this.currentPage * this.pageSize, result.total);
-        
-        showingFrom.textContent = from;
-        showingTo.textContent = to;
-        totalRows.textContent = result.total;
-    }
-}
-
-debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-escapeHtml(unsafe) {
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
-showError(message) {
-    console.error(message);
-    // Puedes implementar notificaciones toast aquí
-    alert(message); // Temporal
-}
-
-initializeEventListeners() {
+    initializeEventListeners() {
         // Pagination
         document.getElementById('pageSize').addEventListener('change', (e) => {
             this.pageSize = parseInt(e.target.value);
@@ -213,8 +44,11 @@ initializeEventListeners() {
         }
 
         // Sort headers
-        document.querySelectorAll('th[data-sort]').forEach(th => {
-            th.addEventListener('click', () => this.handleSort(th.dataset.sort));
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('th[data-sort]')) {
+                const th = e.target.closest('th[data-sort]');
+                this.handleSort(th.dataset.sort);
+            }
         });
     }
 
@@ -227,7 +61,6 @@ initializeEventListeners() {
             search: this.currentSearch
         });
 
-        // Add filters
         Object.entries(this.currentFilters).forEach(([key, value]) => {
             if (value) params.append(key, value);
         });
@@ -239,9 +72,23 @@ initializeEventListeners() {
 
             if (response.ok) {
                 console.log('Datos recibidos:', result);
+                
+                // Usar el orden de columnas que viene del servidor
+                if (result.columns) {
+                    this.currentColumnOrder = result.columns;
+                    this.renderTableHeaders(result.columns);
+                }
+                
                 this.renderTable(result.data);
                 this.renderPagination(result);
                 this.updateTableInfo(result);
+                
+                if (result.data && result.data.length > 0) {
+                    const infoPanel = document.getElementById('dataInfoPanel');
+                    if (infoPanel) {
+                        infoPanel.classList.remove('d-none');
+                    }
+                }
             } else {
                 this.showError('Error cargando datos: ' + (result.error || 'Error desconocido'));
             }
@@ -251,7 +98,33 @@ initializeEventListeners() {
         }
     }
 
-    
+    renderTableHeaders(columns) {
+        const thead = document.getElementById('tableHeaders');
+        if (!thead) return;
+        
+        // USAR EXACTAMENTE EL ORDEN QUE VIENE DEL SERVIDOR
+        let headersHtml = '';
+        
+        columns.forEach(column => {
+            const friendlyName = this.getFriendlyColumnName(column);
+            headersHtml += `
+                <th data-sort="${column}" style="cursor: pointer; min-width: 120px;">
+                    ${friendlyName} <i class="fas fa-sort ms-1"></i>
+                </th>
+            `;
+        });
+        
+        thead.innerHTML = headersHtml;
+        
+        // Re-attach event listeners
+        thead.querySelectorAll('th[data-sort]').forEach(th => {
+            th.addEventListener('click', () => this.handleSort(th.dataset.sort));
+        });
+        
+        // Guardar el orden exacto de columnas
+        this.currentColumnOrder = columns;
+    }
+
     renderTable(data) {
         const tbody = document.getElementById('tableBody');
         
@@ -261,9 +134,10 @@ initializeEventListeners() {
         }
 
         if (!data || data.length === 0) {
+            const colCount = this.currentColumnOrder ? this.currentColumnOrder.length : 20;
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="text-center py-4 text-muted">
+                    <td colspan="${colCount}" class="text-center py-4 text-muted">
                         <i class="fas fa-inbox fa-2x mb-3"></i><br>
                         No se encontraron registros<br>
                         <small class="text-muted">Intenta ajustar los filtros o subir un archivo CSV</small>
@@ -279,7 +153,6 @@ initializeEventListeners() {
             const tr = document.createElement('tr');
             tr.style.cursor = 'pointer';
             
-            // Función helper para manejar valores vacíos o nulos
             const getSafeValue = (value, defaultValue = '-') => {
                 if (value === null || value === undefined || value === '' || value === 'No especificado') {
                     return `<span class="text-muted fst-italic">${defaultValue}</span>`;
@@ -287,35 +160,44 @@ initializeEventListeners() {
                 return this.escapeHtml(value.toString());
             };
 
-            // Función helper para determinar clase de riesgo
             const getRiskClass = (riesgo) => {
                 if (!riesgo || riesgo === 'No especificado') return 'risk-unknown';
                 return `risk-${riesgo.toLowerCase()}`;
             };
 
-            // Función helper para texto de riesgo
             const getRiskText = (riesgo) => {
                 if (!riesgo || riesgo === 'No especificado') return 'No especificado';
                 return riesgo;
             };
 
-            tr.innerHTML = `
-                <td class="fw-bold">${row.id}</td>
-                <td>${getSafeValue(row.Entidad, 'Entidad no especificada')}</td>
-                <td>${getSafeValue(row['Sistema de origen'], 'Sistema origen no especificado')}</td>
-                <td>${getSafeValue(row['Sistema de Destino'], 'Sistema destino no especificado')}</td>
-                <td>
-                    <span class="badge bg-light text-dark border">
-                        ${getSafeValue(row['Tipo de Transmisión'], 'Tipo no especificado')}
-                    </span>
-                </td>
-                <td>${getSafeValue(row['Propietario Datos de Destino'], 'Propietario no especificado')}</td>
-                <td>
-                    <span class="risk-badge ${getRiskClass(row['Riesgo de falla'])}">
-                        ${getRiskText(row['Riesgo de falla'])}
-                    </span>
-                </td>
-            `;
+            // RENDERIZAR EN EL ORDEN EXACTO DE LAS COLUMNAS
+            let rowHtml = '';
+            
+            this.currentColumnOrder.forEach(column => {
+                const value = row[column];
+                
+                if (column === 'Riesgo de falla') {
+                    rowHtml += `
+                        <td>
+                            <span class="risk-badge ${getRiskClass(value)}">
+                                ${getRiskText(value)}
+                            </span>
+                        </td>
+                    `;
+                } else if (column === 'Tipo de Transmisión') {
+                    rowHtml += `
+                        <td>
+                            <span class="badge bg-light text-dark border">
+                                ${getSafeValue(value, 'Tipo no especificado')}
+                            </span>
+                        </td>
+                    `;
+                } else {
+                    rowHtml += `<td>${getSafeValue(value)}</td>`;
+                }
+            });
+
+            tr.innerHTML = rowHtml;
 
             tr.addEventListener('click', () => {
                 if (row.id) {
@@ -333,6 +215,147 @@ initializeEventListeners() {
 
             tbody.appendChild(tr);
         });
+    }
+
+    async loadFilterOptions() {
+        try {
+            const response = await fetch('/api/filter-options');
+            const options = await response.json();
+            
+            // Llenar dropdowns de filtros
+            this.populateFilter('entityFilter', options.entities || []);
+            this.populateFilter('systemFilter', options.systems || []);
+            this.populateFilter('typeFilter', options.types || []);
+        } catch (error) {
+            console.error('Error loading filter options:', error);
+        }
+    }
+
+    populateFilter(selectId, options) {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+        
+        // Mantener la opción "Todos"
+        const currentValue = select.value;
+        select.innerHTML = '<option value="">Todos</option>';
+        
+        options.forEach(option => {
+            const optionElement = document.createElement('option');
+            optionElement.value = option;
+            optionElement.textContent = option;
+            select.appendChild(optionElement);
+        });
+        
+        // Restaurar selección si existe
+        if (options.includes(currentValue)) {
+            select.value = currentValue;
+        }
+    }
+
+    applyFilters() {
+        this.currentFilters = {
+            entity: document.getElementById('entityFilter').value,
+            system: document.getElementById('systemFilter').value,
+            type: document.getElementById('typeFilter').value,
+            risk: document.getElementById('riskFilter').value
+        };
+        this.currentPage = 1;
+        this.loadTableData();
+    }
+
+    resetFilters() {
+        document.getElementById('entityFilter').value = '';
+        document.getElementById('systemFilter').value = '';
+        document.getElementById('typeFilter').value = '';
+        document.getElementById('riskFilter').value = '';
+        this.currentSearch = '';
+        document.getElementById('searchInput').value = '';
+        this.currentFilters = {};
+        this.currentPage = 1;
+        this.loadTableData();
+    }
+
+    handleSort(column) {
+        if (this.currentSort === column) {
+            this.currentSortDir = this.currentSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.currentSort = column;
+            this.currentSortDir = 'asc';
+        }
+        this.currentPage = 1;
+        this.loadTableData();
+        this.updateSortIcons();
+    }
+
+    updateSortIcons() {
+        document.querySelectorAll('th[data-sort] i').forEach(icon => {
+            icon.className = 'fas fa-sort ms-1';
+        });
+        
+        const currentTh = document.querySelector(`th[data-sort="${this.currentSort}"]`);
+        if (currentTh) {
+            const icon = currentTh.querySelector('i');
+            if (icon) {
+                icon.className = this.currentSortDir === 'asc' 
+                    ? 'fas fa-sort-up ms-1' 
+                    : 'fas fa-sort-down ms-1';
+            }
+        }
+    }
+
+    renderPagination(result) {
+        const pagination = document.getElementById('pagination');
+        if (!pagination) return;
+        
+        const totalPages = Math.ceil(result.total / this.pageSize);
+        
+        let html = '';
+        
+        // Botón anterior
+        html += `<li class="page-item ${this.currentPage === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-page="${this.currentPage - 1}">Anterior</a>
+        </li>`;
+        
+        // Páginas
+        for (let i = 1; i <= totalPages; i++) {
+            html += `<li class="page-item ${i === this.currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" data-page="${i}">${i}</a>
+            </li>`;
+        }
+        
+        // Botón siguiente
+        html += `<li class="page-item ${this.currentPage === totalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-page="${this.currentPage + 1}">Siguiente</a>
+        </li>`;
+        
+        pagination.innerHTML = html;
+        
+        // Event listeners para paginación
+        pagination.querySelectorAll('.page-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = parseInt(link.dataset.page);
+                if (page >= 1 && page <= totalPages && page !== this.currentPage) {
+                    this.currentPage = page;
+                    this.loadTableData();
+                }
+            });
+        });
+    }
+
+    updateTableInfo(result) {
+        const showingFrom = document.getElementById('showingFrom');
+        const showingTo = document.getElementById('showingTo');
+        const totalRows = document.getElementById('totalRows');
+        
+        if (showingFrom && showingTo && totalRows) {
+            const from = (this.currentPage - 1) * this.pageSize + 1;
+            const to = Math.min(this.currentPage * this.pageSize, result.total);
+            
+            showingFrom.textContent = from;
+            showingTo.textContent = to;
+            totalRows.textContent = result.total;
+        }
     }
 
     async loadDataInfo() {
@@ -380,6 +403,49 @@ initializeEventListeners() {
 
         infoHTML += `</div></div>`;
         infoPanel.innerHTML = infoHTML;
+    }
+
+    getFriendlyColumnName(column) {
+    // Mapeo básico para columnas comunes, pero mostrar el nombre original para las demás
+    const friendlyNames = {
+        'id': 'ID',
+        'Entidad': 'Entidad',
+        'Sistema de origen': 'Sistema Origen',
+        'Sistema de Destino': 'Sistema Destino',
+        'Tipo de Transmisión': 'Tipo',
+        'Propietario Datos de Destino': 'Propietario',
+        'Riesgo de falla': 'Riesgo'
+    };
+    
+    // Si no está en el mapeo, usar el nombre original
+    return friendlyNames[column] || column;
+    }
+
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    showError(message) {
+        console.error(message);
+        // Puedes implementar notificaciones toast aquí
+        alert(message); // Temporal
     }
 }
 

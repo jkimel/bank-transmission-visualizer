@@ -38,25 +38,68 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 def validate_csv_columns(df):
+    """Valida que el CSV tenga las columnas mínimas requeridas, pero permite columnas adicionales"""
+    
+    # Columnas mínimas requeridas
     required_columns = [
         'Entidad', 'Sistema de origen', 'Sistema de Destino', 
         'Tipo de Transmisión', 'Propietario Datos de Destino', 'Riesgo de falla'
     ]
-    missing_columns = [col for col in required_columns if col not in df.columns]
-    return len(missing_columns) == 0, missing_columns
+    
+    # Buscar coincidencias flexibles
+    column_mappings = {}
+    missing_columns = []
+    
+    for required_col in required_columns:
+        found = False
+        # Buscar la columna requerida (case insensitive, con variaciones)
+        for actual_col in df.columns:
+            if required_col.lower() in actual_col.lower():
+                column_mappings[required_col] = actual_col
+                found = True
+                break
+        
+        if not found:
+            missing_columns.append(required_col)
+    
+    return len(missing_columns) == 0, missing_columns, column_mappings
 
-def clean_dataframe(df):
-    """Limpia el DataFrame manejando valores vacíos y nulos"""
+def clean_and_standardize_dataframe(df, column_mappings):
+    """Limpia y estandariza el DataFrame manteniendo TODAS las columnas"""
     df_clean = df.copy()
     
-    # Reemplazar diferentes representaciones de valores vacíos
-    empty_values = ['', ' ', 'N/A', 'n/a', 'NULL', 'null', 'NaN', 'nan', None, np.nan]
+    # Renombrar columnas requeridas según mapeo para consistencia
+    for required_col, actual_col in column_mappings.items():
+        if actual_col != required_col:
+            df_clean[required_col] = df_clean[actual_col]
+            # Mantener la columna original también
+            if actual_col not in column_mappings.values():
+                df_clean[actual_col] = df_clean[actual_col]
     
+    # Asegurar que tenemos las columnas requeridas
+    required_columns = ['Entidad', 'Sistema de origen', 'Sistema de Destino']
+    for col in required_columns:
+        if col not in df_clean.columns:
+            df_clean[col] = 'No especificado'
+    
+    # Columnas opcionales
+    optional_columns = ['Tipo de Transmisión', 'Propietario Datos de Destino', 'Riesgo de falla']
+    for col in optional_columns:
+        if col not in df_clean.columns:
+            df_clean[col] = 'No especificado'
+    
+    # Reemplazar valores vacíos en TODAS las columnas
+    empty_values = ['', ' ', 'N/A', 'n/a', 'NULL', 'null', 'NaN', 'nan', None, np.nan]
     for col in df_clean.columns:
         if df_clean[col].dtype == 'object':
             df_clean[col] = df_clean[col].replace(empty_values, 'No especificado')
-        else:
-            df_clean[col] = df_clean[col].replace(empty_values, 0)
+    
+    # Agregar ID si no existe
+    if 'id' not in df_clean.columns:
+        df_clean['id'] = range(1, len(df_clean) + 1)
+    
+    print(f"Dataset procesado: {len(df_clean.columns)} columnas totales")
+    print(f"Columnas: {list(df_clean.columns)}")
     
     return df_clean
 
@@ -253,7 +296,6 @@ def upload_file():
 def get_table_data():
     global current_data
     
-    # Cargar datos si no están en memoria
     if current_data is None:
         load_last_data()
         if current_data is None:
@@ -262,7 +304,8 @@ def get_table_data():
                 'total': 0, 
                 'page': 1, 
                 'size': 25, 
-                'total_pages': 0
+                'total_pages': 0,
+                'columns': []
             })
     
     try:
@@ -279,7 +322,7 @@ def get_table_data():
         type_filter = request.args.get('type', '')
         risk_filter = request.args.get('risk', '')
         
-        # Copiar datos limpios
+        # Copiar datos limpios - USAR TODAS LAS COLUMNAS
         filtered_data = current_data.copy()
         
         # Aplicar búsqueda
@@ -289,7 +332,7 @@ def get_table_data():
             ).any(axis=1)
             filtered_data = filtered_data[mask]
         
-        # Aplicar filtros
+        # Aplicar filtros (solo en columnas requeridas)
         if entity_filter:
             if entity_filter == 'No especificado':
                 filtered_data = filtered_data[filtered_data['Entidad'] == 'No especificado']
@@ -335,11 +378,12 @@ def get_table_data():
         end_idx = start_idx + size
         paginated_data = filtered_data.iloc[start_idx:end_idx]
         
-        # Convertir a formato JSON seguro
+        # Convertir a formato JSON seguro - INCLUIR TODAS LAS COLUMNAS
         data_records = []
         for _, row in paginated_data.iterrows():
             record = {}
-            for col in paginated_data.columns:
+            # Incluir TODAS las columnas del dataset
+            for col in filtered_data.columns:
                 value = row[col]
                 # Convertir a tipos nativos de Python
                 if pd.isna(value):
@@ -350,18 +394,22 @@ def get_table_data():
                     record[col] = value
             data_records.append(record)
         
+        # DEVOLVER TODAS LAS COLUMNAS EN ORDEN ORIGINAL
+        original_columns = current_data.columns.tolist()
+        
         return jsonify({
             'data': data_records,
             'total': int(total_rows),
             'page': int(page),
             'size': int(size),
-            'total_pages': int(total_pages)
+            'total_pages': int(total_pages),
+            'columns': original_columns  # ← TODAS las columnas, no solo las requeridas
         })
         
     except Exception as e:
         print(f"Error en /api/table: {str(e)}")
         return jsonify({'error': f'Error procesando datos: {str(e)}'}), 500
-
+    
 @app.route('/api/filter-options', methods=['GET'])
 def get_filter_options():
     global current_data
@@ -440,17 +488,14 @@ def get_graph():
 
 @app.route('/api/data-info', methods=['GET'])
 def get_data_info():
-    """Endpoint para obtener información sobre los datos cargados"""
     global current_data
     
-    # Cargar datos si no están en memoria
     if current_data is None:
         load_last_data()
         if current_data is None:
             return jsonify({'loaded': False})
     
     try:
-        # Estadísticas de datos vacíos
         empty_stats = {}
         for col in current_data.columns:
             empty_count = current_data[col].isnull().sum()
@@ -466,7 +511,7 @@ def get_data_info():
             'total_rows': int(len(current_data)),
             'total_columns': int(len(current_data.columns)),
             'empty_stats': empty_stats,
-            'columns': list(current_data.columns)
+            'columns': current_data.columns.tolist()  # ← Orden original
         })
     except Exception as e:
         return jsonify({'error': f'Error obteniendo información: {str(e)}'}), 500

@@ -18,11 +18,6 @@
                         <i class="fas fa-info-circle me-2"></i>
                         Para comenzar, sube un archivo CSV con los datos de transmisiones
                     </div>
-                    {% else %}
-                    <div class="alert alert-success">
-                        <i class="fas fa-check-circle me-2"></i>
-                        Archivo cargado: <strong>{{ current_filename }}</strong> con {{ current_data|length }} registros
-                    </div>
                     {% endif %}
                     
                     <div class="row mt-4">

@@ -5,8 +5,8 @@
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-8">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-primary text-white">
+        <div class="card border-0 shadow-sm fade-in">
+            <div class="card-header bg-dark text-white">
                 <h4 class="card-title mb-0">
                     <i class="fas fa-upload me-2"></i>Subir Archivo CSV
                 </h4>
@@ -17,35 +17,17 @@
                     <h5>Arrastra y suelta tu archivo CSV aquí</h5>
                     <p class="text-muted mb-3">o</p>
                     
-                    <form id="uploadForm" enctype="multipart/form-data">
+                    <div>
                         <div class="mb-3">
                             <input type="file" class="form-control" id="csvFile" accept=".csv" required>
                         </div>
-                        <button type="submit" class="btn btn-primary btn-lg" id="uploadBtn">
+                        <button type="button" class="btn btn-primary btn-lg" id="uploadBtn">
                             <i class="fas fa-upload me-2"></i>Subir Archivo
                         </button>
-                    </form>
+                    </div>
                 </div>
                 
                 <div id="uploadStatus" class="alert d-none"></div>
-                
-                <div class="mt-4">
-                    <h6 class="text-muted mb-3">Requisitos del archivo:</h6>
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Formato CSV
-                            <i class="fas fa-check text-success"></i>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Columnas requeridas
-                            <i class="fas fa-check text-success"></i>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Máximo 10MB
-                            <i class="fas fa-check text-success"></i>
-                        </li>
-                    </ul>
-                </div>
             </div>
         </div>
     </div>
@@ -54,8 +36,10 @@
 
 {% block extra_js %}
 <script>
-document.getElementById('uploadForm').addEventListener('submit', function(e) {
-    e.preventDefault();
+console.log('Upload script loading...');
+
+document.getElementById('uploadBtn').addEventListener('click', function() {
+    console.log('Upload button clicked');
     
     const fileInput = document.getElementById('csvFile');
     const file = fileInput.files[0];
@@ -63,14 +47,15 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
     const uploadBtn = document.getElementById('uploadBtn');
     
     if (!file) {
-        showStatus('Por favor seleccione un archivo CSV', 'error');
+        alert('Por favor seleccione un archivo CSV');
         return;
     }
+    
+    console.log('File selected:', file.name);
     
     const formData = new FormData();
     formData.append('file', file);
     
-    // Mostrar estado de carga
     uploadBtn.disabled = true;
     uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Subiendo...';
     
@@ -78,37 +63,27 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Response status:', response.status);
+        return response.json();
+    })
     .then(data => {
-        if (data.redirect) {
-            window.location.href = data.redirect;
+        console.log('Response data:', data);
+        if (data.success) {
+            alert('Archivo subido exitosamente: ' + data.message);
+            window.location.href = data.redirect || '/table';
         } else {
-            showStatus(data.error || 'Error desconocido', 'error');
+            alert('Error: ' + data.error);
         }
     })
     .catch(error => {
-        showStatus('Error al subir archivo: ' + error.message, 'error');
+        console.error('Error:', error);
+        alert('Error al subir archivo: ' + error.message);
     })
     .finally(() => {
         uploadBtn.disabled = false;
         uploadBtn.innerHTML = '<i class="fas fa-upload me-2"></i>Subir Archivo';
     });
 });
-
-function showStatus(message, type) {
-    const statusDiv = document.getElementById('uploadStatus');
-    statusDiv.className = `alert alert-${type === 'error' ? 'danger' : 'success'} d-block`;
-    statusDiv.innerHTML = `
-        <i class="fas fa-${type === 'error' ? 'exclamation-triangle' : 'check-circle'} me-2"></i>
-        ${message}
-    `;
-    
-    // Auto-ocultar después de 5 segundos si es éxito
-    if (type !== 'error') {
-        setTimeout(() => {
-            statusDiv.classList.add('d-none');
-        }, 5000);
-    }
-}
 </script>
 {% endblock %}

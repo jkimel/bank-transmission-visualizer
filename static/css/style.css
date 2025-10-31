@@ -4,7 +4,6 @@
     --dark-blue: #0f172a;
     --medium-blue: #334155;
     --light-blue: #e2e8f0;
-    --accent-gold: #d4af37;
     --accent-gray: #64748b;
     --danger-red: #ef4444;
 }
@@ -179,6 +178,10 @@ body {
 .btn-primary:hover, .btn-success:hover, .btn-warning:hover {
     background-color: var(--dark-blue);
     border-color: var(--dark-blue);
+}
+
+.btn.btn-warning.btn-sm {
+    background-color: #d2edb4;
 }
 
 /* Navigation*/
@@ -382,6 +385,30 @@ tr td .text-muted.fst-italic:hover::after {
     pointer-events: none;
     z-index: 1000;
     max-width: 300px;
+}
+.card-header.bg-dark.text-white.d-flex.justify-content-between.align-items-center {
+    background-color:  rgb(92 107 123) !important;
+}
+
+.btn.btn-dark.btn-sm {
+    background-color: rgb(92 107 123)!important;
+}
+
+.card-header.bg-success.text-white.d-flex.justify-content-between.align-items-center {
+    background-color: rgb(74 131 105) !important;
+}
+
+.btn.btn-warning.btn-sm {
+    background-color: rgb(74 131 105) !important;
+    color: white;
+}
+
+.card-header.bg-dark.text-white {
+    background-color:  rgb(92 107 123)!important;
+}
+
+.btn.btn-primary.btn-lg{
+    background-color:  rgb(92 107 123)!important;
 }
 /* Responsive */
 @media (max-width: 768px) {
