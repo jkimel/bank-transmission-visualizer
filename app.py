@@ -22,27 +22,79 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 current_data = None
 current_filename = None
 
-def load_last_data():
-    """Carga los datos del último archivo subido (sin romper si no existe)"""
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
     global current_data, current_filename
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'current.csv')
-
-    # Si no existe el archivo, inicializa vacío
-    if not os.path.exists(filepath):
-        print("⚠️ No se encontró 'current.csv', se inicia sin datos.")
-        current_data = None
-        current_filename = None
-        return
-
+    
     try:
-        df = pd.read_csv(filepath)
-        current_data = df
-        current_filename = 'current.csv'
-        print(f"✅ Datos cargados automáticamente: {len(df)} filas")
+        if 'file' not in request.files:
+            return jsonify({'error': 'No se proporcionó archivo'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'error': 'No se seleccionó archivo'}), 400
+        
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            
+            try:
+                # Leer CSV con manejo de valores vacíos
+                df = pd.read_csv(
+                    filepath, 
+                    na_values=['', ' ', 'N/A', 'n/a', 'NULL', 'null', 'NaN', 'nan'],
+                    keep_default_na=True
+                )
+                
+                is_valid, missing_columns, column_mappings = validate_csv_columns(df)
+                
+                if not is_valid:
+                    if os.path.exists(filepath):
+                        os.remove(filepath)
+                    return jsonify({
+                        'error': f'Columnas obligatorias faltantes: {", ".join(missing_columns)}'
+                    }), 400
+                ]
+                # La función que existe es clean_and_standardize_dataframe
+                df_clean = clean_and_standardize_dataframe(df, column_mappings)
+                
+                # Agregar ID único a cada fila si no existe
+                if 'id' not in df_clean.columns:
+                    df_clean['id'] = range(1, len(df_clean) + 1)
+                
+                # Guardar copia limpia para persistencia
+                df_clean.to_csv(os.path.join(app.config['UPLOAD_FOLDER'], 'current.csv'), index=False)
+                
+                # ACTUALIZAR INMEDIATAMENTE las variables globales
+                current_data = df_clean
+                current_filename = filename
+                
+                print(f"Datos cargados exitosamente: {len(df_clean)} filas")
+                
+                # Devolver datos de éxito
+                return jsonify({
+                    'success': True,
+                    'message': 'Archivo cargado y procesado exitosamente',
+                    'rows': len(df_clean),
+                    'columns': len(df_clean.columns),
+                    'data_preview': df_clean.head(10).to_dict('records'),
+                    'redirect': url_for('table_page')
+                })
+                
+            except Exception as e:
+                # Si falla el procesamiento (p. ej., formato incorrecto), borra el archivo
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                print(f"Error procesando CSV: {str(e)}")
+                return jsonify({'error': f'Error procesando CSV: {str(e)}'}), 400
+        
+        return jsonify({'error': 'Tipo de archivo no permitido'}), 400
+        
     except Exception as e:
-        print(f"⚠️ Error cargando datos guardados: {e}")
-        current_data = None
-        current_filename = None
+        print(f"Error interno: {str(e)}")
+        return jsonify({'error': f'Error interno del servidor: {str(e)}'}), 500
 
 def allowed_file(filename):
     return '.' in filename and \
