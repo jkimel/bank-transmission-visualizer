@@ -23,17 +23,26 @@ current_data = None
 current_filename = None
 
 def load_last_data():
-    """Carga los datos del último archivo subido"""
+    """Carga los datos del último archivo subido (sin romper si no existe)"""
     global current_data, current_filename
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'current.csv')
-    if os.path.exists(filepath):
-        try:
-            df = pd.read_csv(filepath)
-            current_data = df
-            current_filename = 'current.csv'
-            print(f"Datos cargados automáticamente: {len(df)} filas")
-        except Exception as e:
-            print(f"Error cargando datos guardados: {e}")
+
+    # Si no existe el archivo, inicializa vacío
+    if not os.path.exists(filepath):
+        print("⚠️ No se encontró 'current.csv', se inicia sin datos.")
+        current_data = None
+        current_filename = None
+        return
+
+    try:
+        df = pd.read_csv(filepath)
+        current_data = df
+        current_filename = 'current.csv'
+        print(f"✅ Datos cargados automáticamente: {len(df)} filas")
+    except Exception as e:
+        print(f"⚠️ Error cargando datos guardados: {e}")
+        current_data = None
+        current_filename = None
 
 def allowed_file(filename):
     return '.' in filename and \
