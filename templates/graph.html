@@ -185,8 +185,11 @@ class GraphManager {
                     centralGravity: 0.003, 
                     springLength: 250,
                     springConstant: 0.18,
-                    avoidOverlap: 1
+                    avoidOverlap: 1,
+                    damping: 0.9
                 },
+                minVelocity: 0.75, 
+                maxVelocity: 50,
                 stabilization: { enabled: true, iterations: 1000 }
             },
             interaction: { 
