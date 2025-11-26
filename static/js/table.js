@@ -119,9 +119,7 @@ class DataTableManager {
 
         try {
             // Ruta relativa
-            // const response = await fetch(`/api/table?${params}`);
-            const response = await fetch(`https://bank-transmission-visualizer.onrender.com/api/table?${params}`);
-            // para render
+            const response = await fetch(`/api/table?${params}`);
             const result = await response.json();
 
             if (response.ok) {
