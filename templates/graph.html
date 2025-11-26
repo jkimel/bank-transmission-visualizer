@@ -176,35 +176,46 @@ class GraphManager {
         const data = { nodes: this.nodes, edges: this.edges };
         const options = {
             autoResize: true, height: '100%', width: '100%',
-            layout: { hierarchical: { enabled: false }, randomSeed: 4 },
+            layout: { 
+                hierarchical: { enabled: false },
+                randomSeed: 5
+            },
             physics: {
                 enabled: true,
                 solver: 'forceAtlas2Based',
                 forceAtlas2Based: {
                     gravitationalConstant: -300, 
-                    centralGravity: 0.003, 
-                    springLength: 250,
-                    springConstant: 0.18,
+                    // AJUSTE 1: Un poco más de gravedad para anclar el centro
+                    centralGravity: 0.005, 
+                    springLength: 300,
+                    // AJUSTE 2: Resortes más suaves para evitar el efecto látigo
+                    springConstant: 0.05, 
                     avoidOverlap: 1,
-                    damping: 0.9
+                    // AJUSTE 3: Fricción MÁXIMA (Cemento). Esto mata el giro.
+                    damping: 1.0 
                 },
-                minVelocity: 0.75, 
-                maxVelocity: 50,
-                stabilization: { enabled: true, iterations: 1000 }
+                minVelocity: 0.1, // Detenerse ante el mínimo movimiento
+                maxVelocity: 30,  // No permitir movimientos bruscos
+                stabilization: { 
+                    enabled: true, 
+                    iterations: 2000, 
+                    updateInterval: 50,
+                    fit: true 
+                }
             },
             interaction: { 
-                hover: true, // IMPORTANTE: Debe estar en true
+                hover: true, 
                 zoomView: true, dragView: true, dragNodes: true,
                 selectable: false, selectConnectedEdges: false,
                 zoomSpeed: 0.4 
             },
             nodes: {
                 shape: 'box', 
-                font: { size: 50, face: 'Arial', color: '#000' }, 
+                font: { size: 48, face: 'Arial', color: '#000' }, 
                 color: { background: '#ffffff', border: '#455a64' },
                 borderWidth: 1, 
                 shadow: { enabled: true, color: 'rgba(0,0,0,0.2)', size: 5, x: 3, y: 3 },
-                margin: 20, widthConstraint: { maximum: 200 },
+                margin: 15, widthConstraint: { maximum: 200 },
                 chosen: false 
             },
             edges: { 
@@ -214,6 +225,11 @@ class GraphManager {
             }
         };
         this.network = new vis.Network(this.container, data, options);
+        
+        // TRUCO EXTRA: Si todavía se mueve, congelamos las físicas al terminar de cargar
+        this.network.on("stabilizationIterationsDone", function () {
+            this.setOptions( { physics: false } );
+        });
     }
 
     // --- NUEVA LÓGICA DE HOVER ---
@@ -309,13 +325,13 @@ class GraphManager {
                         strokeColor: '#fff', 
                         background: 'none' 
                     },
-                    z: 10
+                    z: 200
                 };
             } else {
                 // --- RESTO DEL GRAFO (FONDO) ---
                 return {
                     id: graphEdge.id,
-                    color: { color: graphEdge.originalColor, opacity: 0.4 }, 
+                    color: { color: graphEdge.originalColor, opacity: 0.2 }, 
                     width: 7, 
                     shadow: { enabled: false },
                     font: { size: 0, color: 'transparent' }, 
