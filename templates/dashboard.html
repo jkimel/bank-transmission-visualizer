@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Transmisiones Bancarias{% endblock %}
+{% block title %}Dashboard{% endblock %}
 
 {% block content %}
 <div class="main-container">
@@ -8,15 +8,15 @@
         <div class="col-12">
             <div class="welcome-card card border-0 shadow-sm">
                 <div class="card-body text-center py-5">
-                    <h1 class="h2 mb-3">Visualizador de Transmisiones Bancarias</h1>
+                    <h1 class="h2 mb-3">Visualizador de Eficiencia de Red</h1>
                     <p class="lead text-muted mb-4">
-                        Sistema para el análisis y visualización del recorrido de transmisiones financieras
+                        Sistema para el análisis de la Ruta Mínima (Dijkstra) en Redes Ponderadas por Latencia.
                     </p>
                     
                     {% if current_data is none %}
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        Para comenzar, sube un archivo CSV con los datos de transmisiones
+                        Para comenzar, sube un archivo CSV con los datos de las redes
                     </div>
                     {% endif %}
                     
@@ -25,7 +25,7 @@
                             <div class="card dashboard-card h-100">
                                 <div class="card-body text-center">
                                     <h5 class="card-title">Subir Datos</h5>
-                                    <p class="card-text">Carga tu archivo CSV con los datos de transmisiones</p>
+                                    <p class="card-text">Carga tu archivo CSV con los datos de las redes</p>
                                     <a href="{{ url_for('upload_page') }}" class="btn btn-primary">Ir a Subir CSV</a>
                                 </div>
                             </div>
@@ -45,7 +45,7 @@
                             <div class="card dashboard-card h-100">
                                 <div class="card-body text-center">
                                     <h5 class="card-title">Visualización</h5>
-                                    <p class="card-text">Analiza las transmisiones mediante grafos interactivos</p>
+                                    <p class="card-text">Analiza las redes mediante grafos interactivos</p>
                                     <a href="{{ url_for('table_page') }}" class="btn btn-warning">Explorar Grafos</a>
                                 </div>
                             </div>
@@ -63,10 +63,10 @@
             </div>
             <div class="card-body">
                 <ol class="list-group list-group-numbered">
-                    <li class="list-group-item border-0">Sube un archivo CSV con el formato requerido</li>
-                    <li class="list-group-item border-0">Navega por los datos en la vista de tabla</li>
-                    <li class="list-group-item border-0">Selecciona una fila para visualizar el grafo</li>
-                    <li class="list-group-item border-0">Analiza las conexiones y riesgos</li>
+                    <li class="list-group-item border-0">Sube un archivo <span class="fw-semibold">CSV</span> con las columnas <span class="fw-semibold">Origen, Destino y Latencia_ms</span>.</li>
+                    <li class="list-group-item border-0">Navega por los datos en la vista de <span class="fw-semibold">Tabla de Conexiones</span>.</li>
+                    <li class="list-group-item border-0">Ve a la pestaña <span class="fw-semibold">Visualización</span> para cargar el grafo de red.</li>
+                    <li class="list-group-item border-0">Usa el formulario para encontrar la <span class="fw-semibold">Ruta Mínima (Dijkstra)</span> entre dos nodos, con o sin paradas intermedias.</li>
                 </ol>
             </div>
         </div>

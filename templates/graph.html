@@ -1,10 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}Visualización de Grafo - Transmisiones Bancarias{% endblock %}
+{% block title %}Visualización de Grafo - Ruta Mínima{% endblock %}
 
 {% block extra_css %}
-<link href="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.css" rel="stylesheet">
-<link href="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.css" rel="stylesheet">
 {% endblock %}
 {% block content %}
 <div class="row">
@@ -12,92 +10,41 @@
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                 <h4 class="card-title mb-0">
-                    <i class="fas fa-project-diagram me-2"></i>Visualización del Recorrido
+                    <i class="fas fa-project-diagram me-2"></i>Análisis de Latencia (Ruta Más Corta)
                 </h4>
                 <a href="{{ url_for('table_page') }}" class="btn btn-dark btn-sm">
                     <i class="fas fa-arrow-left me-1"></i>Volver a la Tabla
                 </a>
             </div>
             <div class="card-body">
-                <!-- Información de la Fila Seleccionada -->
-                <div id="rowInfo" class="alert alert-info d-none">
-                    <div class="row">
+                <div class="graph-controls mb-4">
+                    <div class="row align-items-end">
                         <div class="col-md-3">
-                            <strong>Entidad:</strong> <span id="infoEntidad">-</span>
+                            <label class="form-label small fw-bold">Origen</label>
+                            <select id="selectOrigen" class="form-select form-select-sm"></select>
                         </div>
                         <div class="col-md-3">
-                            <strong>Sistema Origen:</strong> <span id="infoOrigen">-</span>
+                            <label class="form-label small fw-bold">Destino</label>
+                            <select id="selectDestino" class="form-select form-select-sm"></select>
                         </div>
                         <div class="col-md-3">
-                            <strong>Sistema Destino:</strong> <span id="infoDestino">-</span>
+                            <label class="form-label small fw-bold">Paradas Intermedias (separadas por coma)</label>
+                            <input type="text" id="inputParadas" class="form-control form-control-sm" placeholder="Ej: R3,R7">
                         </div>
-                        <div class="col-md-3">
-                            <strong>Riesgo:</strong> <span id="infoRiesgo">-</span>
+                        <div class="col-md-3 d-flex">
+                            <button id="btnBuscarRuta" class="btn btn-primary btn-sm w-100 me-2">
+                                <i class="fas fa-route me-1"></i>Buscar Ruta
+                            </button>
+                            <button id="btnReset" class="btn btn-secondary btn-sm w-100">
+                                <i class="fas fa-redo"></i> Resetear
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Contenedor del Grafo -->
-                <div id="cy"></div>
+                <div id="resultadoRuta" class="alert d-none mb-4"></div>
 
-                <!-- Controles del Grafo -->
-                <div class="graph-controls">
-                    <div class="row align-items-center">
-                        <div class="col-md-6">
-                            <div class="btn-group btn-group-sm">
-                                <button id="layoutDagre" class="btn btn-outline-primary active">
-                                    <i class="fas fa-arrow-right me-1"></i> Izquierda a Derecha
-                                </button>
-                                <button id="resetView" class="btn btn-outline-secondary">
-                                    <i class="fas fa-crosshairs me-1"></i> Centrar Vista
-                                </button>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="legend">
-                                <div class="legend-item">
-                                    <div class="legend-color entity-color"></div>
-                                    <span>Entidad</span>
-                                </div>
-                                <div class="legend-item">
-                                    <div class="legend-color system-color"></div>
-                                    <span>Sistema</span>
-                                </div>
-                                <div class="legend-item">
-                                    <div class="legend-color edge-low"></div>
-                                    <span>Riesgo Bajo</span>
-                                </div>
-                                <div class="legend-item">
-                                    <div class="legend-color edge-medium"></div>
-                                    <span>Riesgo Medio</span>
-                                </div>
-                                <div class="legend-item">
-                                    <div class="legend-color edge-high"></div>
-                                    <span>Riesgo Alto</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Información de Interacción -->
-        <div class="card mt-4">
-            <div class="card-body">
-                <h6 class="card-title"><i class="fas fa-info-circle me-2"></i>Instrucciones de Interacción</h6>
-                <div class="row">
-                    <div class="col-md-6">
-                        <p class="small mb-2"><strong>Zoom:</strong> Rueda del mouse o gesto de pellizco</p>
-                        <p class="small mb-2"><strong>Pan:</strong> Arrastrar el fondo del grafo</p>
-                        <p class="small mb-2"><strong>Mover nodos:</strong> Arrastrar cualquier nodo</p>
-                    </div>
-                    <div class="col-md-6">
-                        <p class="small mb-2"><strong>Información:</strong> Pasa el mouse sobre nodos o aristas</p>
-                        <p class="small mb-2"><strong>Resaltar conexiones:</strong> Haz clic en un nodo</p>
-                        <p class="small mb-2"><strong>Reiniciar vista:</strong> Usa el botón "Centrar Vista"</p>
-                    </div>
-                </div>
+                <div id="network" style="width: 100%; height: 600px; border: 1px solid #ddd;"></div>
             </div>
         </div>
     </div>
@@ -105,259 +52,347 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
-<script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
-<script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+<script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
 <script>
-class GraphVisualizer {
+class GraphManager {
     constructor() {
-        this.cy = null;
-        this.currentLayout = 'dagre';
-        this.rowId = {{ row_id | tojson }};
-        this.currentTooltip = null;
+        this.network = null;
+        this.nodes = new vis.DataSet();
+        this.edges = new vis.DataSet();
         
-        this.initializeCytoscape();
-        this.loadGraphData();
-        this.initializeEventListeners();
+        this.container = document.getElementById('network');
+        
+        if (this.container) {
+            this.container.style.width = '100%';
+            this.container.style.height = '75vh'; 
+            this.container.style.border = '1px solid #e0e0e0';
+            this.container.style.borderRadius = '8px';
+            this.container.style.backgroundColor = '#fafafa';
+        }
+
+        this.originalNodesData = [];
+        this.originalEdgesData = [];
+        this.isPathActive = false; 
+        
+        this.init();
     }
 
-    initializeCytoscape() {
-        this.cy = cytoscape({
-            container: document.getElementById('cy'),
-            elements: [],
-            style: [
-                {
-                    selector: 'node',
-                    style: {
-                        'background-color': '#1e3a8a',
-                        'label': 'data(id)',
-                        'width': 'data(tamaño)',
-                        'height': 'data(tamaño)',
-                        'font-size': '12px',
-                        'color': '#fff',
-                        'text-valign': 'center',
-                        'text-halign': 'center',
-                        'border-width': 2,
-                        'border-color': '#0f172a',
-                        'text-outline-width': 2,
-                        'text-outline-color': '#1e3a8a'
-                    }
-                },
-                {
-                    selector: 'node[tipo="Entidad"]',
-                    style: {
-                        'background-color': '#1e3a8a',
-                        'shape': 'round-rectangle'
-                    }
-                },
-                {
-                    selector: 'node[tipo="Sistema"]',
-                    style: {
-                        'background-color': '#64748b',
-                        'shape': 'ellipse'
-                    }
-                },
-                {
-                    selector: 'edge',
-                    style: {
-                        'width': 'mapData(peso, 1, 3, 2, 6)',
-                        'line-color': 'mapData(peso, 1, 3, #10b981, #ef4444)',
-                        'target-arrow-color': 'mapData(peso, 1, 3, #10b981, #ef4444)',
-                        'target-arrow-shape': 'triangle',
-                        'curve-style': 'bezier',
-                        'label': 'data(tipo)',
-                        'font-size': '10px',
-                        'color': '#374151',
-                        'text-rotation': 'autorotate',
-                        'text-margin-y': -5
-                    }
-                },
-                {
-                    selector: 'edge:selected',
-                    style: {
-                        'line-color': '#d4af37',
-                        'target-arrow-color': '#d4af37'
-                    }
-                },
-                {
-                    selector: 'node:selected',
-                    style: {
-                        'border-color': '#d4af37',
-                        'border-width': 4
-                    }
-                },
-                {
-                    selector: '.highlighted',
-                    style: {
-                        'border-color': '#d4af37',
-                        'border-width': 4,
-                        'line-color': '#d4af37',
-                        'target-arrow-color': '#d4af37'
-                    }
-                }
-            ],
-            layout: this.getLayoutConfig('dagre')
-        });
-
-        // Tooltips
-        this.cy.on('mouseover', 'node, edge', (evt) => {
-            const ele = evt.target;
-            const data = ele.data();
-            let content = '';
-            
-            if (ele.isNode()) {
-                content = `
-                    <strong>${data.id}</strong><br>
-                    Tipo: ${data.tipo}<br>
-                    Conexiones: ${data.grado}
-                `;
-            } else {
-                content = `
-                    <strong>${data.tipo}</strong><br>
-                    Transmisión: ${data.tipo_transmision}<br>
-                    Propietario: ${data.propietario}<br>
-                    Riesgo: ${data.riesgo}
-                `;
-            }
-            
-            this.showTooltip(evt, content);
-        });
-
-        this.cy.on('mouseout', 'node, edge', () => {
-            this.hideTooltip();
-        });
-
-        // Highlight connections on node click
-        this.cy.on('tap', 'node', (evt) => {
-            const node = evt.target;
-            this.highlightConnectedElements(node);
-        });
+    async init() {
+        if (!this.container) return;
+        await this.loadGraphData();
+        this.initGraph();
+        this.initEventListeners();
+        this.setupHoverEvents(); 
+        this.resetHighlight(false);
     }
 
     async loadGraphData() {
-        if (!this.rowId) {
-            this.showError('No se especificó ID de fila');
-            return;
-        }
-
         try {
-            const response = await fetch(`/api/graph?row_id=${this.rowId}`);
+            const response = await fetch("/api/graph");
+            const data = await response.json();
+
+            if (response.ok) {
+                this.originalNodesData = data.nodes;
+                this.originalEdgesData = data.edges;
+                this.renderGraph(data);
+                this.populateNodeSelects(data.all_nodes);
+            } else {
+                this.showResult('Error cargando datos: ' + data.error, 'danger');
+            }
+        } catch (error) {
+            this.showResult('Error de conexión', 'danger');
+        }
+    }
+
+    getLatencyColor(latencia) {
+        if (latencia < 15) return '#00C853'; 
+        if (latencia <= 35) return '#FDD835'; 
+        return '#D50000'; 
+    }
+
+    renderGraph(data) {
+        this.nodes.clear();
+        this.edges.clear();
+        
+        // Nodos limpios (sin popup title)
+        const cleanNodes = data.nodes.map(n => ({
+            id: n.id, label: n.label,
+            font: { 
+                size: 50,  // <--- TAMAÑO GIGANTE FIJO
+                face: 'Arial',
+                color: '#000000'
+            },
+            // Desactiva que el grafo intente ajustar el texto automáticamente
+            scaling: { 
+                label: { 
+                    enabled: false 
+                } 
+            },
+            margin: 20 // Espacio extra
+        }));
+
+        this.nodes.add(cleanNodes);
+
+        // Aristas con popup de latencia
+        const processedEdges = data.edges.map(edge => {
+            const latencia = parseFloat(edge.weight);
+            const colorCode = this.getLatencyColor(latencia);
+            
+            return {
+                ...edge,
+                id: edge.id, 
+                originalColor: colorCode,
+                color: {
+                    color: colorCode,
+                    highlight: colorCode,
+                    hover: colorCode,
+                    opacity: 1.0
+                },
+                width: 9, // Grosor normal
+                font: { size: 0, color: 'transparent' },
+                title: `⏱ Latencia: ${latencia} ms`,
+                shadow: { enabled: false }
+            };
+        });
+
+        this.edges.add(processedEdges);
+        this.originalEdgesData = processedEdges; 
+    }
+
+    populateNodeSelects(nodes) {
+        nodes.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        const selectOrigen = document.getElementById('selectOrigen');
+        const selectDestino = document.getElementById('selectDestino');
+        selectOrigen.innerHTML = '<option value="">-- Seleccionar Origen --</option>';
+        selectDestino.innerHTML = '<option value="">-- Seleccionar Destino --</option>';
+        nodes.forEach(node => {
+            selectOrigen.add(new Option(node, node));
+            selectDestino.add(new Option(node, node));
+        });
+    }
+
+    initGraph() {
+        const data = { nodes: this.nodes, edges: this.edges };
+        const options = {
+            autoResize: true, height: '100%', width: '100%',
+            layout: { hierarchical: { enabled: false }, randomSeed: 4 },
+            physics: {
+                enabled: true,
+                solver: 'forceAtlas2Based',
+                forceAtlas2Based: {
+                    gravitationalConstant: -300, 
+                    centralGravity: 0.003, 
+                    springLength: 250,
+                    springConstant: 0.18,
+                    avoidOverlap: 1
+                },
+                stabilization: { enabled: true, iterations: 1000 }
+            },
+            interaction: { 
+                hover: true, // IMPORTANTE: Debe estar en true
+                zoomView: true, dragView: true, dragNodes: true,
+                selectable: false, selectConnectedEdges: false,
+                zoomSpeed: 0.4 
+            },
+            nodes: {
+                shape: 'box', 
+                font: { size: 50, face: 'Arial', color: '#000' }, 
+                color: { background: '#ffffff', border: '#455a64' },
+                borderWidth: 1, 
+                shadow: { enabled: true, color: 'rgba(0,0,0,0.2)', size: 5, x: 3, y: 3 },
+                margin: 20, widthConstraint: { maximum: 200 },
+                chosen: false 
+            },
+            edges: { 
+                arrows: 'to', 
+                smooth: { type: 'curvedCW', roundness: 0.2 },
+                chosen: false 
+            }
+        };
+        this.network = new vis.Network(this.container, data, options);
+    }
+
+    // --- NUEVA LÓGICA DE HOVER ---
+    setupHoverEvents() {
+        this.network.on("hoverNode", (params) => {
+            if (this.isPathActive) return;
+
+            this.network.canvas.body.container.style.cursor = 'pointer';
+            const connectedEdges = this.network.getConnectedEdges(params.node);
+            
+            // Ponemos en negrita las conexiones
+            const edgesToUpdate = connectedEdges.map(id => ({
+                id: id,
+                width: 11, 
+                shadow: { enabled: true, color: 'rgba(0,0,0,0.2)', size: 3, x: 1, y: 1 }
+            }));
+            
+            this.edges.update(edgesToUpdate);
+        });
+
+        this.network.on("blurNode", (params) => {
+            if (this.isPathActive) return;
+
+            this.network.canvas.body.container.style.cursor = 'default';
+            const connectedEdges = this.network.getConnectedEdges(params.node);
+            
+            // Volvemos al estado normal
+            const edgesToReset = connectedEdges.map(id => ({
+                id: id,
+                width: 6, 
+                shadow: { enabled: false }
+            }));
+            
+            this.edges.update(edgesToReset);
+        });
+    }
+
+    initEventListeners() {
+        document.getElementById('btnBuscarRuta').addEventListener('click', () => this.findPath());
+        document.getElementById('btnReset').addEventListener('click', () => this.resetHighlight());
+    }
+
+    async findPath() {
+        const source = document.getElementById('selectOrigen').value;
+        const target = document.getElementById('selectDestino').value;
+        const stops = document.getElementById('inputParadas').value;
+
+        if (!source || !target) {
+            this.showResult('Selecciona Origen y Destino.', 'warning'); return;
+        }
+        
+        this.showResult('<i class="fas fa-spinner fa-spin"></i> Calculando...', 'info');
+        const params = new URLSearchParams({ source, target, stops });
+        
+        try {
+            const response = await fetch(`/api/find_shortest_path?${params}`);
             const result = await response.json();
 
             if (response.ok) {
-                this.cy.elements().remove();
-                this.cy.add(result.elements);
-                this.applyLayout(this.currentLayout);
-                this.updateRowInfo(result.row_data);
+                this.highlightPath(result.path, result.edges);
+                this.showResult(`✅ Ruta: ${result.path.join(' → ')} | Latencia: <span class="fw-semibold">${result.latency} ms</span>`, 'success');
             } else {
-                this.showError('Error cargando grafo: ' + result.error);
+                this.resetHighlight(false);
+                this.showResult(`Error: ${result.error}`, 'danger');
             }
         } catch (error) {
-            this.showError('Error de conexión: ' + error.message);
+            this.resetHighlight(false);
+            this.showResult('Error de conexión', 'danger');
         }
     }
 
-    updateRowInfo(rowData) {
-        document.getElementById('infoEntidad').textContent = rowData.Entidad;
-        document.getElementById('infoOrigen').textContent = rowData['Sistema de origen'];
-        document.getElementById('infoDestino').textContent = rowData['Sistema de Destino'];
-        document.getElementById('infoRiesgo').textContent = rowData['Riesgo de falla'];
-        document.getElementById('rowInfo').classList.remove('d-none');
-    }
+    highlightPath(path, edgesInPath) {
+        this.isPathActive = true; 
 
-    initializeEventListeners() {
-        document.getElementById('layoutDagre').addEventListener('click', () => {
-            this.currentLayout = 'dagre';
-            this.updateLayoutButtons();
-            this.applyLayout('dagre');
-        });
+        // 1. LÍNEAS (ARISTAS)
+        const edgesToUpdate = this.edges.get().map(graphEdge => {
+            const isPartOfPath = edgesInPath.some(pathEdge => 
+                String(pathEdge.from) === String(graphEdge.from) && 
+                String(pathEdge.to) === String(graphEdge.to)
+            );
 
-        document.getElementById('resetView').addEventListener('click', () => {
-            this.cy.reset();
-            this.cy.fit();
-        });
-    }
-
-    updateLayoutButtons() {
-        document.getElementById('layoutDagre').classList.toggle('active', this.currentLayout === 'dagre');
-    }
-
-    applyLayout(layoutName) {
-        const layout = this.cy.layout(this.getLayoutConfig(layoutName));
-        layout.run();
-    }
-
-    getLayoutConfig(layoutName) {
-        const configs = {
-            dagre: {
-                name: 'dagre',
-                rankDir: 'LR',  // ← CAMBIADO: Left to Right (Izquierda a Derecha)
-                spacingFactor: 1.5,
-                nodeSep: 100,   // ← Aumentado para mejor separación horizontal
-                rankSep: 150,   // ← Aumentado para mejor separación vertical
-                fit: true,
-                padding: 50,
-                align: 'UL',
-                ranker: 'network-simplex',
-                minLen: function(edge) { return 1; },
-                edgeWeight: function(edge) { return 1; }
+            if (isPartOfPath) {
+                // --- CAMINO SELECCIONADO ---
+                return {
+                    id: graphEdge.id,
+                    color: { color: graphEdge.originalColor, opacity: 1 },
+                    width: 10, 
+                    shadow: { enabled: true, color: 'rgba(0,0,0,0.4)', size: 4, x: 3, y: 3 },
+                    font: { 
+                        size: 30, 
+                        color: '#000', 
+                        strokeWidth: 5, 
+                        strokeColor: '#fff', 
+                        background: 'none' 
+                    },
+                    z: 10
+                };
+            } else {
+                // --- RESTO DEL GRAFO (FONDO) ---
+                return {
+                    id: graphEdge.id,
+                    color: { color: graphEdge.originalColor, opacity: 0.4 }, 
+                    width: 7, 
+                    shadow: { enabled: false },
+                    font: { size: 0, color: 'transparent' }, 
+                    z: 0
+                };
             }
-        };
-        return configs[layoutName];
-    }
+        });
+        this.edges.update(edgesToUpdate);
 
-    highlightConnectedElements(node) {
-        this.cy.elements().removeClass('highlighted');
+        // 2. NODOS (VÉRTICES)
+        const nodesToUpdate = this.nodes.get().map(node => {
+            if (path.includes(node.id)) {
+                // --- NODO DEL CAMINO ---
+                return { 
+                    id: node.id, 
+                    color: { background: '#ffffff', border: '#000000' }, 
+                    borderWidth: 4, // Borde más grueso para destacar
+                    // MANTENEMOS EL TAMAÑO 50 QUE TE GUSTÓ
+                    font: { size: 50, color: '#000', face: 'Arial' }, 
+                    shadow: { enabled: true, size: 8, x: 4, y: 4, color: 'rgba(0,0,0,0.3)' },
+                    scaling: { label: { enabled: false } }
+                };
+            }
+            return { 
+                id: node.id, 
+                // --- NODO DE FONDO ---
+                color: { background: '#f5f5f5', border: '#eceff1' },
+                borderWidth: 1,
+                // Mantenemos tamaño 50 pero en gris para que no "baile" el grafo
+                font: { size: 50, color: '#cfd8dc' }, 
+                shadow: { enabled: false }
+            };
+        });
+        this.nodes.update(nodesToUpdate);
         
-        const connectedEdges = node.connectedEdges();
-        const connectedNodes = node.neighborhood();
-        
-        connectedEdges.addClass('highlighted');
-        connectedNodes.addClass('highlighted');
+        this.network.fit({ nodes: path, animation: { duration: 1000, easingFunction: 'easeInOutCubic' } });
     }
+    resetHighlight(shouldResetResult = true) {
+        this.isPathActive = false; 
 
-    showTooltip(evt, content) {
-        const tooltip = document.createElement('div');
-        tooltip.className = 'cy-tooltip';
-        tooltip.innerHTML = content;
+        if (shouldResetResult) {
+            this.showResult('Selecciona ruta.', 'info');
+            this.network.fit();
+        }
         
-        document.body.appendChild(tooltip);
-        
-        const updatePosition = (e) => {
-            tooltip.style.left = (e.originalEvent.pageX + 10) + 'px';
-            tooltip.style.top = (e.originalEvent.pageY + 10) + 'px';
-        };
-        
-        updatePosition(evt);
-        this.currentTooltip = { element: tooltip, updatePosition };
-        
-        // Actualizar posición mientras se mueve el mouse
-        this.cy.on('mousemove', 'node, edge', updatePosition);
-    }
+        // AQUÍ ESTABA EL PROBLEMA:
+        this.nodes.update(this.originalNodesData.map(node => ({
+            id: node.id, 
+            color: { background: '#ffffff', border: '#455a64' },
+            // CAMBIA EL 16 POR 50 AQUÍ TAMBIÉN:
+            font: { size: 50, color: '#000', face: 'Arial' }, 
+            borderWidth: 1, 
+            shadow: { enabled: true, color: 'rgba(0,0,0,0.2)', size: 5, x: 3, y: 3 },
+            // Asegúrate de volver a desactivar el escalado aquí para que se mantenga grande
+            scaling: { label: { enabled: false } },
+            margin: 20
+        })));
 
-    hideTooltip() {
-        if (this.currentTooltip) {
-            this.currentTooltip.element.remove();
-            this.currentTooltip = null;
-            this.cy.off('mousemove');
+        if (this.originalEdgesData.length > 0) {
+            const cleanEdges = this.originalEdgesData.map(e => ({
+                ...e,
+                font: { size: 0, color: 'transparent' },
+                color: { color: e.originalColor, opacity: 1.0 },
+                // CAMBIA EL GROSOR AQUÍ TAMBIÉN (si querías que fueran más gruesas):
+                width: 9
+            }));
+            this.edges.update(cleanEdges);
         }
     }
-
-    showError(message) {
-        const alert = document.createElement('div');
-        alert.className = 'alert alert-danger alert-dismissible fade show';
-        alert.innerHTML = `
-            <i class="fas fa-exclamation-triangle me-2"></i>
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        document.querySelector('.card-body').prepend(alert);
+    
+    showResult(message, type) {
+        const resultDiv = document.getElementById('resultadoRuta');
+        if (resultDiv) {
+            resultDiv.classList.remove('d-none');
+            resultDiv.className = `alert alert-${type} mb-4`;
+            resultDiv.innerHTML = message;
+        }
     }
 }
 
-// Inicializar el visualizador cuando la página cargue
-document.addEventListener('DOMContentLoaded', function() {
-    window.graphVisualizer = new GraphVisualizer();
-});
+document.addEventListener('DOMContentLoaded', () => new GraphManager());
 </script>
 {% endblock %}

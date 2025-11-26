@@ -20,10 +20,10 @@ class GraphManager {
             return;
         }
 
-        if (!this.currentRowId) {
-            this.showError('No se especificó ID de fila');
-            return;
-        }
+        // if (!this.currentRowId) {
+        //     this.showError('No se especificó ID de fila');
+        //     return;
+        // }
 
         await this.loadGraphData();
         this.initGraph();
@@ -32,7 +32,8 @@ class GraphManager {
 
     async loadGraphData() {
         try {
-            const response = await fetch(`https://bank-transmission-visualizer.onrender.com/api/graph?row_id=${this.currentRowId}`);
+            const response = await fetch("/api/graph");
+
             const data = await response.json();
 
             if (response.ok) {
@@ -141,21 +142,25 @@ class GraphManager {
 
         const options = {
             layout: {
+                // Desactiva el layout jerárquico para que no sea una línea rígida
                 hierarchical: {
-                    enabled: true,
-                    direction: 'UD', // Up-Down (de arriba hacia abajo)
-                    sortMethod: 'directed',
-                    levelSeparation: 200,
-                    nodeSpacing: 150,
-                    treeSpacing: 200,
-                    blockShifting: true,
-                    edgeMinimization: true,
-                    parentCentralization: true
+                    enabled: false 
                 }
             },
             physics: {
-                enabled: false, // Desactiva la física para layout fijo
-                stabilization: { iterations: 1000 }
+                // Activa las físicas para que los nodos se repelan y ocupen espacio
+                enabled: true, 
+                solver: 'forceAtlas2Based', // Un algoritmo que distribuye bien las redes
+                forceAtlas2Based: {
+                    gravitationalConstant: -50,
+                    centralGravity: 0.01,
+                    springLength: 100,
+                    springConstant: 0.08
+                },
+                stabilization: {
+                    enabled: true,
+                    iterations: 1000 // Pre-calcula posiciones antes de mostrar para que no "baile" tanto
+                }
             },
             interaction: {
                 dragNodes: true,
@@ -174,7 +179,7 @@ class GraphManager {
                     maximum: 250
                 },
                 font: {
-                    size: 16,
+                    size: 20,
                     face: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
                     color: '#333',
                     strokeWidth: 2,

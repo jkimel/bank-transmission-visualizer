@@ -4,13 +4,14 @@ import pandas as pd
 import networkx as nx
 import os
 import json
+import re
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import numpy as np
 
 app = Flask(__name__)
 CORS(app)
-app.secret_key = 'your-secret-key-here'
+app.secret_key = '1234'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
 app.config['ALLOWED_EXTENSIONS'] = {'csv'}
@@ -27,7 +28,6 @@ def load_last_data():
     global current_data, current_filename
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'current.csv')
 
-    # Si no existe el archivo, inicializa vacío
     if not os.path.exists(filepath):
         print("⚠️ No se encontró 'current.csv', se inicia sin datos.")
         current_data = None
@@ -38,35 +38,28 @@ def load_last_data():
         df = pd.read_csv(filepath)
         current_data = df
         current_filename = 'current.csv'
-        print(f"✅ Datos cargados automáticamente: {len(df)} filas")
+        print(f"Datos cargados automáticamente: {len(df)} filas")
     except Exception as e:
         print(f"⚠️ Error cargando datos guardados: {e}")
         current_data = None
         current_filename = None
-
 
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 def validate_csv_columns(df):
-    """Valida que el CSV tenga las columnas mínimas requeridas, pero permite columnas adicionales"""
+    """Valida que el CSV tenga las columnas mínimas requeridas: Origen, Destino, Latencia_ms."""
+    required_columns = ['Origen', 'Destino', 'Latencia_ms']
     
-    # Columnas mínimas requeridas
-    required_columns = [
-        'Entidad', 'Sistema de origen', 'Sistema de Destino', 
-        'Tipo de Transmisión', 'Propietario Datos de Destino', 'Riesgo de falla'
-    ]
-    
-    # Buscar coincidencias flexibles
     column_mappings = {}
     missing_columns = []
     
     for required_col in required_columns:
         found = False
-        # Buscar la columna requerida (case insensitive, con variaciones)
         for actual_col in df.columns:
-            if required_col.lower() in actual_col.lower():
+            # Buscar coincidencia (insensible a mayúsculas y espacios)
+            if required_col.lower().replace('_', '').replace(' ', '') == actual_col.lower().replace('_', '').replace(' ', ''):
                 column_mappings[required_col] = actual_col
                 found = True
                 break
@@ -74,139 +67,57 @@ def validate_csv_columns(df):
         if not found:
             missing_columns.append(required_col)
     
-    return len(missing_columns) == 0, missing_columns, column_mappings
+    # Si todas las columnas requeridas fueron encontradas y mapeadas:
+    if len(missing_columns) == 0:
+        df_clean = df.rename(columns=column_mappings)
+        
+        # Convertir Latencia a numérico, ignorando errores
+        df_clean['Latencia_ms'] = pd.to_numeric(df_clean['Latencia_ms'], errors='coerce')
+        
+        # Eliminar filas con valores nulos o latencias negativas (Dijkstra requiere pesos no negativos)
+        df_clean.dropna(subset=['Origen', 'Destino', 'Latencia_ms'], inplace=True)
+        df_clean = df_clean[df_clean['Latencia_ms'] >= 0]
+        
+        df_clean['id'] = range(1, len(df_clean) + 1)
+        
+        return True, df_clean, column_mappings
+    
+    return False, None, missing_columns
 
 def clean_and_standardize_dataframe(df, column_mappings):
-    """Limpia y estandariza el DataFrame manteniendo TODAS las columnas"""
-    df_clean = df.copy()
+    is_valid, df_clean, missing_cols = validate_csv_columns(df)
     
-    # Renombrar columnas requeridas según mapeo para consistencia
-    for required_col, actual_col in column_mappings.items():
-        if actual_col != required_col:
-            df_clean[required_col] = df_clean[actual_col]
-            # Mantener la columna original también
-            if actual_col not in column_mappings.values():
-                df_clean[actual_col] = df_clean[actual_col]
-    
-    # Asegurar que tenemos las columnas requeridas
-    required_columns = ['Entidad', 'Sistema de origen', 'Sistema de Destino']
-    for col in required_columns:
-        if col not in df_clean.columns:
-            df_clean[col] = 'No especificado'
-    
-    # Columnas opcionales
-    optional_columns = ['Tipo de Transmisión', 'Propietario Datos de Destino', 'Riesgo de falla']
-    for col in optional_columns:
-        if col not in df_clean.columns:
-            df_clean[col] = 'No especificado'
-    
-    # Reemplazar valores vacíos en TODAS las columnas
-    empty_values = ['', ' ', 'N/A', 'n/a', 'NULL', 'null', 'NaN', 'nan', None, np.nan]
-    for col in df_clean.columns:
-        if df_clean[col].dtype == 'object':
-            df_clean[col] = df_clean[col].replace(empty_values, 'No especificado')
-    
-    # Agregar ID si no existe
-    if 'id' not in df_clean.columns:
-        df_clean['id'] = range(1, len(df_clean) + 1)
-    
-    print(f"Dataset procesado: {len(df_clean.columns)} columnas totales")
-    print(f"Columnas: {list(df_clean.columns)}")
+    if not is_valid:
+        raise ValueError(f"Faltan columnas obligatorias: {', '.join(missing_cols)}")
+
+    # Asegurar que los nombres y el orden sean los esperados
+    df_clean = df_clean[['id', 'Origen', 'Destino', 'Latencia_ms']]
     
     return df_clean
 
-def risk_to_numeric(risk):
-    risk_map = {'Alto': 3, 'Medio': 2, 'Bajo': 1, 'No especificado': 1}
-    return risk_map.get(risk, 1)
+def generate_full_latency_graph():
+    """Genera el grafo dirigido y ponderado con todos los datos de latencia."""
+    global current_data
+    if current_data is None:
+        return nx.DiGraph()
 
-def generate_graph_from_row(row_data):
     G = nx.DiGraph()
     
-    # Obtener valores con manejo de nulos
-    entidad = row_data.get('Entidad', 'Entidad desconocida')
-    sistema_origen = row_data.get('Sistema de origen', 'Sistema origen desconocido')
-    sistema_destino = row_data.get('Sistema de Destino', 'Sistema destino desconocido')
-    tipo_transmision = row_data.get('Tipo de Transmisión', 'No especificado')
-    propietario = row_data.get('Propietario Datos de Destino', 'No especificado')
-    riesgo = row_data.get('Riesgo de falla', 'No especificado')
-    
-    # Agregar nodos (asegurarse de que no estén vacíos)
-    if entidad and entidad != 'No especificado':
-        G.add_node(entidad, tipo='Entidad')
-    if sistema_origen and sistema_origen != 'No especificado':
-        G.add_node(sistema_origen, tipo='Sistema')
-    if sistema_destino and sistema_destino != 'No especificado':
-        G.add_node(sistema_destino, tipo='Sistema')
-    
-    # Agregar aristas solo si los nodos existen
-    if (entidad and entidad != 'No especificado' and 
-        sistema_origen and sistema_origen != 'No especificado'):
+    for _, row in current_data.iterrows():
+        origen = str(row['Origen'])
+        destino = str(row['Destino'])
+        latencia = row['Latencia_ms']
+        
         G.add_edge(
-            entidad, 
-            sistema_origen,
-            tipo='envío',
-            tipo_transmision=tipo_transmision,
-            propietario=propietario,
-            riesgo=riesgo,
-            riesgo_numerico=risk_to_numeric(riesgo)
+            origen, 
+            destino, 
+            weight=latencia,
+            label=f"{latencia:.1f} ms"
         )
-    
-    if (sistema_origen and sistema_origen != 'No especificado' and 
-        sistema_destino and sistema_destino != 'No especificado'):
-        G.add_edge(
-            sistema_origen, 
-            sistema_destino,
-            tipo='transferencia',
-            tipo_transmision=tipo_transmision,
-            propietario=propietario,
-            riesgo=riesgo,
-            riesgo_numerico=risk_to_numeric(riesgo)
-        )
-    
+        
     return G
 
-def graph_to_cytoscape(G):
-    nodes = []
-    edges = []
-    
-    # Calcular grados para tamaño de nodos
-    degrees = dict(G.degree())
-    max_degree = max(degrees.values()) if degrees else 1
-    
-    for node in G.nodes():
-        node_data = {
-            'data': {
-                'id': str(node),
-                'tipo': str(G.nodes[node].get('tipo', 'Desconocido')),
-                'grado': int(degrees.get(node, 1)),
-                'tamaño': float(30 + (degrees.get(node, 1) / max_degree) * 50)
-            }
-        }
-        nodes.append(node_data)
-    
-    for edge in G.edges(data=True):
-        source, target, data = edge
-        edge_data = {
-            'data': {
-                'id': f"{source}-{target}",
-                'source': str(source),
-                'target': str(target),
-                'tipo': str(data.get('tipo', '')),
-                'tipo_transmision': str(data.get('tipo_transmision', '')),
-                'propietario': str(data.get('propietario', '')),
-                'riesgo': str(data.get('riesgo', '')),
-                'riesgo_numerico': int(data.get('riesgo_numerico', 1)),
-                'peso': int(data.get('riesgo_numerico', 1))
-            }
-        }
-        edges.append(edge_data)
-    
-    return nodes + edges
-
-# Cargar datos automáticamente al iniciar
-load_last_data()
-
-# Rutas de Navegación Principal
+# --- Rutas de Navegación Principal ---
 @app.route('/')
 def dashboard():
     return render_template('dashboard.html')
@@ -227,10 +138,10 @@ def table_page():
 
 @app.route('/graph')
 def graph_page():
-    row_id = request.args.get('row_id')
-    return render_template('graph.html', row_id=row_id)
+    # La página de grafo ya no necesita row_id, siempre muestra el grafo completo
+    return render_template('graph.html')
 
-# API Endpoints
+# --- API Endpoints ---
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     global current_data, current_filename
@@ -250,28 +161,22 @@ def upload_file():
             file.save(filepath)
             
             try:
-                # Leer CSV con manejo de valores vacíos
                 df = pd.read_csv(
                     filepath, 
                     na_values=['', ' ', 'N/A', 'n/a', 'NULL', 'null', 'NaN', 'nan'],
                     keep_default_na=True
                 )
                 
-                is_valid, missing_columns, column_mappings = validate_csv_columns(df)
+                is_valid, df_clean_temp, column_mappings = validate_csv_columns(df)
                 
                 if not is_valid:
                     if os.path.exists(filepath):
                         os.remove(filepath)
                     return jsonify({
-                        'error': f'Columnas obligatorias faltantes: {", ".join(missing_columns)}'
+                        'error': f'Columnas obligatorias faltantes: {", ".join(column_mappings)}'
                     }), 400
                 
-                # La función que existe es clean_and_standardize_dataframe
                 df_clean = clean_and_standardize_dataframe(df, column_mappings)
-                
-                # Agregar ID único a cada fila si no existe (mantenido para seguridad, aunque ya se hace dentro)
-                if 'id' not in df_clean.columns:
-                    df_clean['id'] = range(1, len(df_clean) + 1)
                 
                 # Guardar copia limpia para persistencia
                 df_clean.to_csv(os.path.join(app.config['UPLOAD_FOLDER'], 'current.csv'), index=False)
@@ -280,20 +185,14 @@ def upload_file():
                 current_data = df_clean
                 current_filename = filename
                 
-                print(f"Datos cargados exitosamente: {len(df_clean)} filas")
-                
-                # Devolver datos de éxito
                 return jsonify({
                     'success': True,
                     'message': 'Archivo cargado y procesado exitosamente',
                     'rows': len(df_clean),
-                    'columns': len(df_clean.columns),
-                    'data_preview': df_clean.head(10).to_dict('records'),
                     'redirect': url_for('table_page')
                 })
                 
             except Exception as e:
-                # Si falla el procesamiento (p. ej., formato incorrecto), borra el archivo
                 if os.path.exists(filepath):
                     os.remove(filepath)
                 print(f"Error procesando CSV: {str(e)}")
@@ -318,97 +217,80 @@ def get_table_data():
                 'page': 1, 
                 'size': 25, 
                 'total_pages': 0,
-                'columns': []
+                'columns': ['id', 'Origen', 'Destino', 'Latencia_ms']
             })
     
     try:
-        # Parámetros de paginación y filtros
         page = request.args.get('page', 1, type=int)
         size = request.args.get('size', 25, type=int)
         sort_col = request.args.get('sort', 'id')
         sort_dir = request.args.get('sort_dir', 'asc')
         search = request.args.get('search', '')
         
-        # Filtros adicionales
-        entity_filter = request.args.get('entity', '')
-        system_filter = request.args.get('system', '')
-        type_filter = request.args.get('type', '')
-        risk_filter = request.args.get('risk', '')
+        # Filtros específicos (para el futuro si se agregan)
+        filter_origen = request.args.get('origen', '')
+        filter_destino = request.args.get('destino', '')
         
-        # Copiar datos limpios - USAR TODAS LAS COLUMNAS
         filtered_data = current_data.copy()
         
-        # Aplicar búsqueda
+        # Aplicar filtros específicos
+        if filter_origen:
+            filtered_data = filtered_data[filtered_data['Origen'].astype(str) == filter_origen]
+        if filter_destino:
+            filtered_data = filtered_data[filtered_data['Destino'].astype(str) == filter_destino]
+        
+        # Aplicar búsqueda general
         if search and search.strip():
             mask = filtered_data.astype(str).apply(
                 lambda x: x.str.contains(search, case=False, na=False)
             ).any(axis=1)
             filtered_data = filtered_data[mask]
         
-        # Aplicar filtros (solo en columnas requeridas)
-        if entity_filter:
-            if entity_filter == 'No especificado':
-                filtered_data = filtered_data[filtered_data['Entidad'] == 'No especificado']
-            else:
-                filtered_data = filtered_data[filtered_data['Entidad'] == entity_filter]
-                
-        if system_filter:
-            if system_filter == 'No especificado':
-                mask = (filtered_data['Sistema de origen'] == 'No especificado') | \
-                       (filtered_data['Sistema de Destino'] == 'No especificado')
-            else:
-                mask = (filtered_data['Sistema de origen'] == system_filter) | \
-                       (filtered_data['Sistema de Destino'] == system_filter)
-            filtered_data = filtered_data[mask]
-            
-        if type_filter:
-            if type_filter == 'No especificado':
-                filtered_data = filtered_data[filtered_data['Tipo de Transmisión'] == 'No especificado']
-            else:
-                filtered_data = filtered_data[filtered_data['Tipo de Transmisión'] == type_filter]
-                
-        if risk_filter:
-            if risk_filter == 'No especificado':
-                filtered_data = filtered_data[filtered_data['Riesgo de falla'] == 'No especificado']
-            else:
-                filtered_data = filtered_data[filtered_data['Riesgo de falla'] == risk_filter]
-        
         # Aplicar ordenamiento
         if sort_col in filtered_data.columns:
+            
+            # Función auxiliar para Ordenamiento Natural (Natural Sort)
+            # Convierte "R10" en ['r', 10] y "R2" en ['r', 2] para que el 2 gane.
+            def natural_keys(text):
+                return [int(c) if c.isdigit() else c.lower() 
+                        for c in re.split(r'(\d+)', str(text))]
+            
+            # Truco de Pandas:
+            # 1. Creamos una columna temporal invisible con la "clave natural"
+            filtered_data['_sort_temp'] = filtered_data[sort_col].apply(natural_keys)
+            
+            # 2. Ordenamos usando esa columna temporal
             filtered_data = filtered_data.sort_values(
-                by=sort_col, 
-                ascending=(sort_dir == 'asc'),
-                na_position='last'
+                by='_sort_temp', 
+                ascending=(sort_dir == 'asc')
             )
+            
+            # 3. Borramos la columna temporal para que no salga en el JSON
+            filtered_data = filtered_data.drop(columns=['_sort_temp'])
         
         # Aplicar paginación
         total_rows = len(filtered_data)
         total_pages = max(1, (total_rows + size - 1) // size) if size > 0 else 1
-        
         page = max(1, min(page, total_pages))
-        
         start_idx = (page - 1) * size
         end_idx = start_idx + size
         paginated_data = filtered_data.iloc[start_idx:end_idx]
         
-        # Convertir a formato JSON seguro - INCLUIR TODAS LAS COLUMNAS
+        # Convertir a formato JSON seguro
         data_records = []
         for _, row in paginated_data.iterrows():
             record = {}
-            # Incluir TODAS las columnas del dataset
-            for col in filtered_data.columns:
+            for col in ['id', 'Origen', 'Destino', 'Latencia_ms']:
                 value = row[col]
-                # Convertir a tipos nativos de Python
                 if pd.isna(value):
                     record[col] = None
-                elif hasattr(value, 'item'):  # Para numpy types
+                elif hasattr(value, 'item'):
                     record[col] = value.item() if hasattr(value, 'item') else value
                 else:
                     record[col] = value
             data_records.append(record)
         
-        # DEVOLVER TODAS LAS COLUMNAS EN ORDEN ORIGINAL
-        original_columns = current_data.columns.tolist()
+        original_columns = ['id', 'Origen', 'Destino', 'Latencia_ms']
         
         return jsonify({
             'data': data_records,
@@ -416,7 +298,7 @@ def get_table_data():
             'page': int(page),
             'size': int(size),
             'total_pages': int(total_pages),
-            'columns': original_columns  # ← TODAS las columnas, no solo las requeridas
+            'columns': original_columns
         })
         
     except Exception as e:
@@ -427,77 +309,134 @@ def get_table_data():
 def get_filter_options():
     global current_data
     
-    # Cargar datos si no están en memoria
     if current_data is None:
         load_last_data()
         if current_data is None:
-            return jsonify({
-                'entities': [], 
-                'systems': [], 
-                'types': [], 
-                'risks': []
-            })
-    
+            return jsonify({ 'origenes': [], 'destinos': [] })
+        
     try:
-        # Obtener opciones únicas
-        entities = current_data['Entidad'].unique().tolist()
-        systems_orig = current_data['Sistema de origen'].unique().tolist()
-        systems_dest = current_data['Sistema de Destino'].unique().tolist()
-        systems = list(set(systems_orig + systems_dest))
-        types = current_data['Tipo de Transmisión'].unique().tolist()
-        risks = current_data['Riesgo de falla'].unique().tolist()
+        origenes = current_data['Origen'].unique().tolist()
+        destinos = current_data['Destino'].unique().tolist()
         
-        # Limpiar y ordenar
-        entities_clean = sorted([str(e) for e in entities if e and str(e) != 'nan'])
-        systems_clean = sorted([str(s) for s in systems if s and str(s) != 'nan'])
-        types_clean = sorted([str(t) for t in types if t and str(t) != 'nan'])
-        risks_clean = sorted([str(r) for r in risks if r and str(r) != 'nan'])
+        origen_clean = sorted([str(s) for s in origenes if s and str(s) != 'nan'])
+        destino_clean = sorted([str(t) for t in destinos if t and str(t) != 'nan'])
         
+        # DEVOLVER SOLO LAS CLAVES NECESARIAS
         return jsonify({
-            'entities': entities_clean,
-            'systems': systems_clean,
-            'types': types_clean,
-            'risks': risks_clean
+            'origenes': origen_clean,
+            'destinos': destino_clean
         })
     except Exception as e:
         print(f"Error en /api/filter-options: {str(e)}")
         return jsonify({'error': f'Error obteniendo opciones: {str(e)}'}), 500
 
 @app.route('/api/graph', methods=['GET'])
-def get_graph():
+def get_full_graph():
     global current_data
-    
-    # Cargar datos si no están en memoria
+
     if current_data is None:
         load_last_data()
         if current_data is None:
             return jsonify({'error': 'No hay datos cargados'}), 400
-    
+
     try:
-        row_id = request.args.get('row_id', type=int)
+        G = generate_full_latency_graph()
+
+        nodes_data = [{'id': n, 'label': n, 'title': n} for n in G.nodes()]
         
-        if not row_id:
-            return jsonify({'error': 'ID de fila no proporcionado'}), 400
-        
-        # Buscar la fila específica
-        row_data = current_data[current_data['id'] == row_id]
-        
-        if row_data.empty:
-            return jsonify({'error': f'Fila con ID {row_id} no encontrada'}), 404
-        
-        row_dict = row_data.iloc[0].to_dict()
-        
-        # Generar grafo
-        G = generate_graph_from_row(row_dict)
-        elements = graph_to_cytoscape(G)
-        
+        edges_data = []
+        for u, v, data in G.edges(data=True):
+            edges_data.append({
+                'from': u,
+                'to': v,
+                'weight': data['weight'],
+                'label': data['label'],
+                'title': f"Latencia: {data['weight']:.1f} ms",
+                'id': f"{u}-{v}-{data['weight']}"
+            })
+
         return jsonify({
-            'elements': elements,
-            'row_data': row_dict
+            'nodes': nodes_data,
+            'edges': edges_data,
+            'nodos': len(G.nodes()),
+            'aristas': len(G.edges()),
+            'all_nodes': sorted(list(G.nodes()))
         })
+
     except Exception as e:
         print(f"Error en /api/graph: {str(e)}")
         return jsonify({'error': f'Error generando grafo: {str(e)}'}), 500
+
+@app.route('/api/find_shortest_path', methods=['GET'])
+def find_shortest_path():
+    global current_data
+    if current_data is None:
+        return jsonify({'error': 'No hay datos cargados para calcular la ruta'}), 400
+
+    source = request.args.get('source')
+    target = request.args.get('target')
+    stops_str = request.args.get('stops', '')
+    stops = [s.strip() for s in stops_str.split(',') if s.strip()]
+
+    if not source or not target:
+        return jsonify({'error': 'Debe especificar origen y destino'}), 400
+
+    try:
+        G = generate_full_latency_graph()
+        full_path = []
+        total_latency = 0.0
+
+        # Crear la secuencia de tramos a calcular: (Origen, P1), (P1, P2), ..., (Pn, Destino)
+        path_sequence = []
+        
+        if not stops:
+            path_sequence.append((source, target))
+        else:
+            # Origen a primera parada
+            path_sequence.append((source, stops[0]))
+            # Paradas intermedias
+            for i in range(len(stops) - 1):
+                path_sequence.append((stops[i], stops[i+1]))
+            # Última parada a Destino
+            path_sequence.append((stops[-1], target))
+
+        # Iterar sobre la secuencia de tramos (Dijkstra para cada tramo)
+        for i, (src, dst) in enumerate(path_sequence):
+            
+            if src not in G.nodes or dst not in G.nodes:
+                return jsonify({'error': f"Nodo '{src}' o '{dst}' no existe en el grafo"}), 400
+
+            path = nx.shortest_path(G, source=src, target=dst, weight='weight')
+            distance = nx.shortest_path_length(G, source=src, target=dst, weight='weight')
+            
+            total_latency += distance
+            
+            # Combinar caminos, eliminando duplicados
+            if i == 0:
+                full_path.extend(path)
+            else:
+                full_path.extend(path[1:])
+
+        # Generar la lista de aristas del camino
+        path_edges = []
+        for i in range(len(full_path) - 1):
+            u, v = full_path[i], full_path[i+1]
+            # Usar G[u][v][0] para manejar aristas paralelas, aunque NetworkX shortest_path elige una
+            weight = G[u][v]['weight']
+            path_edges.append({'from': u, 'to': v, 'weight': weight})
+
+
+        return jsonify({
+            'path': full_path,
+            'latency': round(total_latency, 2),
+            'edges': path_edges
+        })
+
+    except nx.NetworkXNoPath:
+        return jsonify({'error': 'No existe un camino entre los nodos especificados o a través de las paradas.'}), 404
+    except Exception as e:
+        print(f"Error calculando ruta: {str(e)}")
+        return jsonify({'error': f'Error interno calculando ruta: {str(e)}'}), 500
 
 @app.route('/api/data-info', methods=['GET'])
 def get_data_info():
@@ -524,7 +463,7 @@ def get_data_info():
             'total_rows': int(len(current_data)),
             'total_columns': int(len(current_data.columns)),
             'empty_stats': empty_stats,
-            'columns': current_data.columns.tolist()  # ← Orden original
+            'columns': current_data.columns.tolist()
         })
     except Exception as e:
         return jsonify({'error': f'Error obteniendo información: {str(e)}'}), 500
@@ -533,14 +472,13 @@ def get_data_info():
 def download_file():
     global current_data
     
-    # Cargar datos si no están en memoria
     if current_data is None:
         load_last_data()
         if current_data is None:
             return jsonify({'error': 'No hay datos para descargar'}), 400
     
     try:
-        download_filename = f"transmisiones_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        download_filename = f"network_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], download_filename)
         
         # Remover la columna ID temporal antes de descargar
@@ -553,4 +491,5 @@ def download_file():
         return jsonify({'error': f'Error descargando archivo: {str(e)}'}), 500
 
 if __name__ == '__main__':
+    load_last_data() # Intenta cargar al inicio
     app.run(debug=True, host='0.0.0.0', port=5000)
